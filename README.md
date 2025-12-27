@@ -16,3 +16,6 @@ Each new message cleares the old one.
 ## NOTE:
 There are now cheap ESP32 based LCD displays, but I wanted a linux server so I can add custom automation services. 
 Also I had this hardware laying around, not usefull for anything else, so I decided to do something usefull with it. 
+
+## Status
+Just starting this, so not yet usable
