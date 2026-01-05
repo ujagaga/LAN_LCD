@@ -1,6 +1,19 @@
 #include <MCUFRIEND_kbv.h>
 #include <Adafruit_GFX.h>
 #include <ArduinoJson.h>
+#include <TouchScreen.h> // for resistive touch panels
+
+#define DEBOUNCE_MS 500
+
+// Replace with your actual pins
+#define YP A1  
+#define XM A2  
+#define YM 8   
+#define XP 9   
+
+TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300);
+
+unsigned long lastTouchMillis = 0;
 
 #define BUFFER_SIZE   256
 
@@ -49,6 +62,26 @@ void redraw() {
   Serial.println("OK");
 }
 
+void handleTouch() {
+    TSPoint p = ts.getPoint();
+
+    // Restore pins for TFT after reading
+    pinMode(XM, OUTPUT);
+    pinMode(YP, OUTPUT);
+    pinMode(XP, OUTPUT); 
+    pinMode(YM, OUTPUT);
+
+    // Detect press using simple threshold
+    if (p.z > ts.pressureThreshhold) {
+      // Only send one event per debounce period
+      unsigned long now = millis();
+      if (now - lastTouchMillis > DEBOUNCE_MS) {
+        lastTouchMillis = now;
+        Serial.println("touch");
+      }
+    }
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -82,6 +115,8 @@ void setup() {
 }
 
 void loop() {
+  handleTouch();
+
   if (!Serial.available()) return;
 
   size_t len = Serial.readBytesUntil('\n', jsonBuffer, sizeof(jsonBuffer) - 1);
@@ -113,5 +148,5 @@ void loop() {
     bgColor = parseColor(doc["bg"]);
   }
 
-  redraw();
+  redraw();  
 }

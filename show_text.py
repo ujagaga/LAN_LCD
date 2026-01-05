@@ -41,6 +41,8 @@ COLORS = {
 app = Flask(__name__)
 app.json.compact = False
 serial_lock = threading.Lock()
+touch_lock = threading.Lock()
+touch_pending = False
 
 # Open serial port ONCE
 ser = serial.Serial(
@@ -49,8 +51,23 @@ ser = serial.Serial(
     timeout=SERIAL_TIMEOUT
 )
 
-# Disable Arduino auto-reset
-time.sleep(1)  # allow Arduino to stabilize
+def serial_listener():
+    global touch_pending
+
+    while True:
+        try:
+            line = ser.readline().decode("utf-8", errors="ignore").strip()
+            if not line:
+                continue
+
+            if line == "touch":
+                with touch_lock:
+                    touch_pending = True
+
+        except Exception:
+            # Do not crash the thread on serial errors
+            time.sleep(0.1)
+
 
 def send_to_lcd(payload: dict):
     """
@@ -107,6 +124,28 @@ def render_color_list():
 @app.route("/", methods=["GET"])
 def index():
     return f"""
+    <html>
+    <head>
+      <style>
+        body {{
+          font-family: sans-serif;
+        }}
+
+        pre {{
+          background-color: #000;
+          color: #fff;
+          padding: 10px;
+          border-radius: 6px;
+          overflow-x: auto;
+        }}
+
+        code {{
+          color: #fff;
+        }}
+      </style>
+    </head>
+    <body>
+
     <h2>LAN LCD Controller</h2>
 
     <p>Send display commands to the LCD using JSON.</p>
@@ -143,8 +182,14 @@ Content-Type: application/json
   "size": 2
 }}
     </pre>
-    """
 
+    <h3>Detect touch</h3>
+    <p>To get info if the screen was touched since last request use URL:</p>
+    <pre>/get/</pre>
+
+    </body>
+    </html>
+    """
 
 @app.route("/set/", methods=["GET", "POST"])
 def set_display():
@@ -177,9 +222,27 @@ def set_display():
     except Exception as e:
         return jsonify(error="Internal error", detail=str(e)), 500
 
+@app.route("/get", methods=["GET"])
+def get_touch():
+    global touch_pending
+
+    with touch_lock:
+        touched = touch_pending
+        touch_pending = False  # consume event
+
+    return jsonify(
+        touched=touched
+    )
+
 # ---------------- Entry Point -------------------
 
 if __name__ == "__main__":
+    listener_thread = threading.Thread(
+        target=serial_listener,
+        daemon=True
+    )
+    listener_thread.start()
+
     app.run(
         host="0.0.0.0",
         port=8080,
